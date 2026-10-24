@@ -125,9 +125,35 @@ label_for() {
 
 # --- rendering --------------------------------------------------------------
 
+# Draws one headline segment. A trailing word such as "RAM" or "SSD" gets the
+# second colour, so "32 GB" and "RAM" are told apart. Prints coloured rows, all
+# padded to the same visible width ("#" is left for the caller to make solid).
+banner_segment() {
+  local text=$1 c1=$2 c2=$3 font=$4 R=$'\e[0m'
+  local main=$text unit="" last=${text##* }
+  if [[ $text == *" "* && $last =~ ^[A-Za-z]+$ && ! $last =~ ^[KMGT]B$ ]]; then
+    main=${text% *}; unit=$last
+  fi
+  local -a a b=()
+  mapfile -t a < <(figlet -w 1000 -f "$font" "$main")
+  [[ -n $unit ]] && mapfile -t b < <(figlet -w 1000 -f "$font" "$unit")
+  local wa wb=0 widest='{ if (length > m) m = length } END { print m + 0 }'
+  wa=$(printf '%s\n' "${a[@]}" | awk "$widest")
+  (( ${#b[@]} )) && wb=$(printf '%s\n' "${b[@]}" | awk "$widest")
+  local r pa pb
+  for r in "${!a[@]}"; do
+    pa=$(printf '%-*s' "$wa" "${a[r]}")
+    pb=""
+    [[ -n $unit ]] && pb=$(printf '    %-*s' "$wb" "${b[r]:-}")
+    [[ -z ${pa// /}${pb// /} ]] && continue
+    printf '\e[1;38;5;%sm%s\e[1;38;5;%sm%s%s\n' "$c1" "$pa" "$c2" "$pb" "$R"
+  done
+}
+
 # Large figlet headline of the key specs; skipped if figlet is missing or BIG=off.
-# BIG splits into segments on "|", each drawn in its own colour (COLORS), side by
-# side when the terminal is wide enough, otherwise stacked.
+# BIG splits into segments on "|", each drawn in its own colour (COLORS, with
+# COLORS2 for the trailing unit word), side by side when the terminal is wide
+# enough, otherwise stacked.
 render_banner() {
   local text=${CFG[BIG]:-}
   command -v figlet >/dev/null || return 0
@@ -140,17 +166,19 @@ render_banner() {
 
   local font=${CFG[FONT]:-banner} cols gap=6 R=$'\e[0m'
   cols=$(tput cols 2>/dev/null || echo 80)
-  local -a colors segs
+  local -a colors colors2 segs
   read -r -a colors <<<"${CFG[COLORS]:-81 214 177 114}"
+  read -r -a colors2 <<<"${CFG[COLORS2]:-117 222 183 151}"
   IFS='|' read -r -a segs <<<"$text"
 
-  # Render each segment as ASCII, padded to a uniform width per segment.
+  # Render each segment; rows come back coloured and padded to its width.
   local -a widths=() blocks=()
   local i height=0 total=2
   for i in "${!segs[@]}"; do
     local out w
-    out=$(figlet -w 1000 -f "$font" "${segs[i]# }" | sed '/^ *$/d')
-    w=$(awk '{ if (length > m) m = length } END { print m + 0 }' <<<"$out")
+    out=$(banner_segment "${segs[i]# }" "${colors[i % ${#colors[@]}]}" \
+      "${colors2[i % ${#colors2[@]}]}" "$font")
+    w=$(sed 's/\x1b\[[0-9;]*m//g' <<<"$out" | awk '{ if (length > m) m = length } END { print m + 0 }')
     widths+=("$w"); blocks+=("$out")
     (( total += w + (i ? gap : 0) ))
     local h; h=$(wc -l <<<"$out"); (( h > height )) && height=$h
@@ -164,18 +192,18 @@ render_banner() {
     for (( r = 1; r <= height; r++ )); do
       local line="  "
       for i in "${!blocks[@]}"; do
-        local row c=${colors[i % ${#colors[@]}]}
+        local row
         row=$(sed -n "${r}p" <<<"${blocks[i]}")
+        [[ -z $row ]] && row=$(printf '%*s' "${widths[i]}" '')
         (( i )) && line+=$(printf '%*s' "$gap" '')
-        line+=$'\e[1;38;5;'"$c"'m'"$(printf '%-*s' "${widths[i]}" "$row")$R"
+        line+=$row
       done
       sed "$solid" <<<"$line"
     done
   else
     for i in "${!blocks[@]}"; do
-      local c=${colors[i % ${#colors[@]}]}
       (( i )) && echo
-      sed "$solid; s/^/  "$'\e[1;38;5;'"$c"'m'"/; s/\$/$R/" <<<"${blocks[i]}"
+      sed "$solid; s/^/  /" <<<"${blocks[i]}"
     done
   fi
 }

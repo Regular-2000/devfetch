@@ -27,6 +27,7 @@ devfetch --set accent 208                  # label colour (256-colour number)
 devfetch --set header "dev@latitude"       # replace user@host
 devfetch --set big "32GB|i3"               # custom headline; "|" splits colour segments
 devfetch --set colors "81 214"             # one 256-colour number per segment
+devfetch --set colors2 "117 222"           # colour of the trailing word (RAM, SSD)
 devfetch --set big off                     # hide the headline
 devfetch --set font big                    # figlet font (ls /usr/share/figlet)
 devfetch --config                          # print the config
@@ -36,7 +37,7 @@ devfetch --edit                            # open the config in $EDITOR
 Config lives in `~/.config/devfetch/config` as plain `KEY=value` lines.
 
 Built-in fields: `MODEL`, `CPU`, `RAM`, `STORAGE`, `DISPLAY`, `OS`, `KERNEL`,
-`TOOLS`. Settings: `HEADER`, `TAGLINE`, `ACCENT`, `BIG`, `FONT`, `COLORS`.
+`TOOLS`. Settings: `HEADER`, `TAGLINE`, `ACCENT`, `BIG`, `FONT`, `COLORS`, `COLORS2`.
 
 If `figlet` is installed (`sudo apt install figlet`), a large headline built
 from RAM and storage (`32 GB RAM` and `128 GB SSD`, each in its own colour; "RAM"
