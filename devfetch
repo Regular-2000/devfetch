@@ -168,7 +168,7 @@ render_banner() {
   cols=$(tput cols 2>/dev/null || echo 80)
   local -a colors colors2 segs
   read -r -a colors <<<"${CFG[COLORS]:-81 214 177 114}"
-  read -r -a colors2 <<<"${CFG[COLORS2]:-117 222 183 151}"
+  read -r -a colors2 <<<"${CFG[COLORS2]:-31 172 97 65}"
   IFS='|' read -r -a segs <<<"$text"
 
   # Render each segment; rows come back coloured and padded to its width.
