@@ -26,7 +26,7 @@ default_config() {
 MODEL=Dell Latitude 5300 2-in-1 Chromebook
 STORAGE=128 GB SSD
 DISPLAY=13.3" FHD touchscreen, 360° hinge
-TAGLINE=Full Linux dev environment, ready out of the box
+TAGLINE=Runs a full Linux dev environment (Crostini)
 EOF
 }
 
