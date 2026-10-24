@@ -39,7 +39,8 @@ Built-in fields: `MODEL`, `CPU`, `RAM`, `STORAGE`, `DISPLAY`, `OS`, `KERNEL`,
 `TOOLS`. Settings: `HEADER`, `TAGLINE`, `ACCENT`, `BIG`, `FONT`, `COLORS`.
 
 If `figlet` is installed (`sudo apt install figlet`), a large headline built
-from RAM and storage (`32GB` and `128GB`, each in its own colour) is printed
+from RAM and storage (`32 GB RAM` and `128 GB SSD`, each in its own colour; "RAM"
+is spelled out so nobody mistakes it for eMMC size) is printed
 above the screen in solid block letters. Segments sit side by side when the
 terminal is wide enough and stack otherwise.
 

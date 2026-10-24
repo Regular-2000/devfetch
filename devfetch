@@ -133,11 +133,9 @@ render_banner() {
   command -v figlet >/dev/null || return 0
   [[ $text == off ]] && return 0
   if [[ -z $text ]]; then
-    # Default: "32GB|128GB" from the RAM and STORAGE fields.
-    local ram storage s
-    ram=$(field_value RAM); storage=$(field_value STORAGE)
-    read -r -a s <<<"$storage"
-    text="${ram// /}|${s[0]:-}${s[1]:-}"
+    # Default: "32 GB RAM|128 GB SSD" from the RAM and STORAGE fields. Spelling
+    # out RAM matters: on a Chromebook a bare "32 GB" reads as eMMC size.
+    text="$(field_value RAM) RAM|$(field_value STORAGE)"
   fi
 
   local font=${CFG[FONT]:-banner} cols gap=6 R=$'\e[0m'
