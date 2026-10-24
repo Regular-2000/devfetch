@@ -19,7 +19,7 @@ CONFIG="$CONFIG_DIR/config"
 # Built-in fields, in display order. Values are auto-detected unless set in config.
 BUILTIN=(MODEL CPU RAM STORAGE DISPLAY OS KERNEL TOOLS)
 # Settings that tune the screen rather than adding a line.
-SETTINGS=(HEADER TAGLINE ACCENT)
+SETTINGS=(HEADER TAGLINE ACCENT BIG FONT)
 
 default_config() {
   cat <<'EOF'
@@ -125,6 +125,23 @@ label_for() {
 
 # --- rendering --------------------------------------------------------------
 
+# Large figlet banner of the headline specs; skipped if figlet is missing or BIG=off.
+render_banner() {
+  local accent=$1 text=${CFG[BIG]:-}
+  command -v figlet >/dev/null || return 0
+  [[ $text == off ]] && return 0
+  if [[ -z $text ]]; then
+    # Default: "32GB / 128GB" from the RAM and STORAGE fields.
+    local ram storage
+    ram=$(field_value RAM); storage=$(field_value STORAGE)
+    read -r -a s <<<"$storage"
+    text="${ram// /} / ${s[0]:-}${s[1]:-}"
+  fi
+  echo
+  figlet -w "$(tput cols 2>/dev/null || echo 80)" -f "${CFG[FONT]:-standard}" "$text" |
+    sed "s/^/  /; s/^/"$'\e[1;38;5;'"$accent"'m'"/; s/\$/"$'\e[0m'"/"
+}
+
 render() {
   local accent=${CFG[ACCENT]:-39}
   local A=$'\e[1;38;5;'"$accent"'m' D=$'\e[2m' B=$'\e[1m' R=$'\e[0m' G=$'\e[38;5;114m'
@@ -164,6 +181,7 @@ render() {
   local n=${#info[@]} m=${#art[@]} i
   (( n > m )) || n=$m
   local offset=$(( (n - m) / 2 ))
+  render_banner "$accent"
   echo
   for (( i = 0; i < n; i++ )); do
     local a=""
