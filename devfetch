@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+# devfetch - neofetch-style spec screen for photographing a Chromebook for sale.
+#
+# Live values (CPU, RAM, OS, kernel, dev tools) are detected; anything Crostini
+# can't see (model, real SSD size, display) comes from the config file.
+#
+#   devfetch                     show the screen
+#   devfetch --set KEY "value"   set/override a field (any KEY adds a custom line)
+#   devfetch --unset KEY         remove a field / go back to auto-detect
+#   devfetch --config            print the config
+#   devfetch --edit              open the config in an editor
+#   devfetch --help
+
+set -euo pipefail
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/devfetch"
+CONFIG="$CONFIG_DIR/config"
+
+# Built-in fields, in display order. Values are auto-detected unless set in config.
+BUILTIN=(MODEL CPU RAM STORAGE DISPLAY OS KERNEL TOOLS)
+# Settings that tune the screen rather than adding a line.
+SETTINGS=(HEADER TAGLINE ACCENT)
+
+default_config() {
+  cat <<'EOF'
+MODEL=Dell Latitude 5300 2-in-1 Chromebook
+STORAGE=128 GB SSD
+DISPLAY=13.3" FHD touchscreen, 360° hinge
+TAGLINE=Full Linux dev environment, ready out of the box
+EOF
+}
+
+declare -A CFG=()
+CFG_KEYS=()
+
+load_config() {
+  if [[ ! -f $CONFIG ]]; then
+    mkdir -p "$CONFIG_DIR"
+    default_config >"$CONFIG"
+  fi
+  local k v
+  while IFS='=' read -r k v || [[ -n $k ]]; do
+    [[ -z $k || $k == \#* ]] && continue
+    [[ -v CFG[$k] ]] || CFG_KEYS+=("$k")
+    CFG[$k]=$v
+  done <"$CONFIG"
+}
+
+save_config() {
+  local tmp k
+  tmp=$(mktemp "$CONFIG_DIR/.config.XXXXXX")
+  for k in "${CFG_KEYS[@]}"; do
+    [[ -v CFG[$k] ]] && printf '%s=%s\n' "$k" "${CFG[$k]}"
+  done >"$tmp"
+  mv "$tmp" "$CONFIG"
+}
+
+normalize_key() {
+  local k=${1^^}
+  k=${k// /_}
+  [[ $k =~ ^[A-Z0-9_]+$ ]] || { echo "devfetch: invalid key '$1' (use letters, digits, _)" >&2; exit 1; }
+  printf '%s' "$k"
+}
+
+# --- auto-detection ---------------------------------------------------------
+
+detect_cpu() {
+  local name threads
+  name=$(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2-)
+  name=${name//(R)/}; name=${name//(TM)/}; name=${name/ CPU/}
+  name=$(echo $name)  # squeeze whitespace
+  threads=$(nproc)
+  printf '%s (%s threads)' "$name" "$threads"
+}
+
+detect_ram() {
+  # Crostini sees slightly less than installed RAM; round up to a multiple of 4 GB.
+  local kb gb
+  kb=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
+  gb=$(( (kb * 1024 / 1000000000 + 3) / 4 * 4 ))
+  printf '%s GB' "$gb"
+}
+
+detect_os() {
+  local pretty
+  pretty=$(. /etc/os-release && echo "${NAME%% *} $VERSION_ID ${VERSION_CODENAME:-}")
+  pretty=${pretty% }
+  if [[ -e /dev/.cros_milestone || $(cat /sys/class/dmi/id/sys_vendor 2>/dev/null) == ChromiumOS ]]; then
+    printf 'ChromeOS + %s Linux (Crostini)' "$pretty"
+  else
+    printf '%s' "$pretty"
+  fi
+}
+
+detect_tools() {
+  local t found=()
+  for t in git gh python3 node docker go rustc gcc java code vim; do
+    command -v "$t" >/dev/null 2>&1 && found+=("$t")
+  done
+  local IFS='·'
+  printf '%s' "${found[*]}" | sed 's/·/ · /g'
+}
+
+field_value() {
+  local k=$1
+  if [[ -v CFG[$k] ]]; then printf '%s' "${CFG[$k]}"; return; fi
+  case $k in
+    CPU) detect_cpu ;;
+    RAM) detect_ram ;;
+    OS) detect_os ;;
+    KERNEL) uname -r ;;
+    TOOLS) detect_tools ;;
+  esac
+}
+
+label_for() {
+  case $1 in
+    TOOLS) echo "Dev tools" ;;
+    OS) echo "OS" ;;
+    CPU) echo "CPU" ;;
+    RAM) echo "RAM" ;;
+    *) local l=${1//_/ }; l=${l,,}; echo "${l^}" ;;
+  esac
+}
+
+# --- rendering --------------------------------------------------------------
+
+render() {
+  local accent=${CFG[ACCENT]:-39}
+  local A=$'\e[1;38;5;'"$accent"'m' D=$'\e[2m' B=$'\e[1m' R=$'\e[0m' G=$'\e[38;5;114m'
+  local header=${CFG[HEADER]:-$USER@$(hostname)}
+
+  local art=(
+    "  ╭────────────────────╮"
+    "  │ ┌────────────────┐ │"
+    "  │ │ ${G}\$${R} devfetch     │ │"
+    "  │ │ ${G}>${R} ready.       │ │"
+    "  │ │ ${G}█${R}              │ │"
+    "  │ └────────────────┘ │"
+    "  ╰─┬────────────────┬─╯"
+    " ▁▁▁┴────────────────┴▁▁▁"
+    " ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔"
+  )
+  local art_width=26
+
+  local rule
+  rule=$(printf '%*s' "${#header}" '')
+  local info=("${A}${header}${R}" "${D}${rule// /─}${R}")
+  local k v
+  for k in "${BUILTIN[@]}"; do
+    v=$(field_value "$k")
+    [[ -n $v ]] && info+=("${A}$(label_for "$k")${R}: $v")
+  done
+  for k in "${CFG_KEYS[@]}"; do
+    [[ " ${BUILTIN[*]} ${SETTINGS[*]} " == *" $k "* ]] && continue
+    info+=("${A}$(label_for "$k")${R}: ${CFG[$k]}")
+  done
+  [[ -n ${CFG[TAGLINE]:-} ]] && info+=("" "${B}${CFG[TAGLINE]}${R}")
+  local palette="" c
+  for c in 0 1 2 3 4 5 6 7; do palette+=$'\e[4'"$c"'m   '; done
+  info+=("" "$palette$R")
+
+  # Art is vertically centred against the info column.
+  local n=${#info[@]} m=${#art[@]} i
+  (( n > m )) || n=$m
+  local offset=$(( (n - m) / 2 ))
+  echo
+  for (( i = 0; i < n; i++ )); do
+    local a=""
+    (( i >= offset && i - offset < m )) && a=${art[i - offset]}
+    # Pad art by visible width (strip colour codes before measuring).
+    local plain
+    plain=$(printf '%s' "$a" | sed 's/\x1b\[[0-9;]*m//g')
+    printf '%s%*s   %s\n' "$a" $(( art_width - ${#plain} )) '' "${info[i]:-}"
+  done
+  echo
+}
+
+# --- CLI --------------------------------------------------------------------
+
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
+
+load_config
+case ${1:-} in
+  "") render ;;
+  --set)
+    [[ $# -ge 3 ]] || { echo 'usage: devfetch --set KEY "value"' >&2; exit 1; }
+    k=$(normalize_key "$2"); shift 2
+    [[ -v CFG[$k] ]] || CFG_KEYS+=("$k")
+    CFG[$k]="$*"
+    save_config
+    echo "set $k = $*"
+    ;;
+  --unset)
+    [[ $# -ge 2 ]] || { echo 'usage: devfetch --unset KEY' >&2; exit 1; }
+    k=$(normalize_key "$2")
+    unset 'CFG[$k]'
+    save_config
+    echo "unset $k"
+    ;;
+  --config) cat "$CONFIG" ;;
+  --edit) "${EDITOR:-nano}" "$CONFIG" ;;
+  -h|--help) usage ;;
+  *) echo "devfetch: unknown option '$1'" >&2; usage >&2; exit 1 ;;
+esac
